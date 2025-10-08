@@ -5,6 +5,7 @@ using KinoWebsite_Backend.Data;
 using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
 
 namespace KinoWebsite_Backend.Tests.Services
@@ -15,8 +16,22 @@ namespace KinoWebsite_Backend.Tests.Services
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
             return new AppDbContext(options);
+        }
+
+        // Hilfsmethode
+        private Seat CreateSeat(int roomId, char row, int seatNumber)
+        {
+            return new Seat
+            {
+                RoomId = roomId,
+                Row = row,
+                SeatNumber = seatNumber,
+                Type = "Standard",
+                isAvailable = true
+            };
         }
 
         [Fact]
@@ -30,6 +45,7 @@ namespace KinoWebsite_Backend.Tests.Services
 
             Assert.NotNull(created);
             Assert.Single(db.Rooms);
+            Assert.Equal("Saal 1", created.Name);
         }
 
         [Fact]
@@ -91,7 +107,10 @@ namespace KinoWebsite_Backend.Tests.Services
 
             var room = new Room { Name = "Blockiert", Capacity = 10, isAvailable = true };
             db.Rooms.Add(room);
-            db.Seats.Add(new Seat { Room = room, Row = 'A', SeatNumber = 1, isAvailable = true });
+            await db.SaveChangesAsync();
+
+            
+            db.Seats.Add(CreateSeat(room.Id, 'A', 1));
             await db.SaveChangesAsync();
 
             var result = await service.DeleteRoomAsync(room.Id);
@@ -112,7 +131,7 @@ namespace KinoWebsite_Backend.Tests.Services
             var seats = await service.GenerateLayoutAsync(room.Id, 2, 3);
 
             Assert.NotNull(seats);
-            Assert.Equal(6, seats.Count); // 2 Reihen * 3 Sitze
+            Assert.Equal(6, seats.Count); 
         }
 
         [Fact]
@@ -125,8 +144,9 @@ namespace KinoWebsite_Backend.Tests.Services
             db.Rooms.Add(room);
             await db.SaveChangesAsync();
 
-            db.Seats.Add(new Seat { RoomId = room.Id, Row = 'A', SeatNumber = 1 });
-            db.Seats.Add(new Seat { RoomId = room.Id, Row = 'A', SeatNumber = 2 });
+            
+            db.Seats.Add(CreateSeat(room.Id, 'A', 1));
+            db.Seats.Add(CreateSeat(room.Id, 'A', 2));
             await db.SaveChangesAsync();
 
             var capacity = await service.RecalculateCapacityAsync(room.Id);

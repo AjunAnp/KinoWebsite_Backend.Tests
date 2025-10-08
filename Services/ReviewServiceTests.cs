@@ -20,12 +20,31 @@ namespace KinoWebsite_Backend.Tests.Services
             return new AppDbContext(options);
         }
 
+        private Movie CreateMovie(int id = 1, string title = "Testfilm")
+        {
+            return new Movie
+            {
+                Id = id,
+                Title = title,
+                Description = "Beschreibung",
+                Duration = 120,
+                Genre = "Action",
+                ReleaseDate = DateTime.UtcNow,
+                TrailerUrl = "http://example.com/trailer",
+                Director = "Regisseur",
+                ImDbRating = 8.2,
+                Cast = Array.Empty<string>(), 
+                ImageUrl = "http://example.com/img.jpg",
+                AgeRestriction = AgeRestriction.UsK12
+            };
+        }
+
         [Fact]
         public async Task CreateReviewAsync_ShouldAddReview_WhenMovieExists()
         {
             // Arrange
             var db = GetDbContext();
-            db.Movies.Add(new Movie { Id = 1, Title = "Testfilm" });
+            db.Movies.Add(CreateMovie(1));
             await db.SaveChangesAsync();
 
             var service = new ReviewService(db);
@@ -68,12 +87,12 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task GetReviewByIdAsync_ShouldReturnCorrectReview()
         {
             var db = GetDbContext();
-            var service = new ReviewService(db);
-
-            db.Movies.Add(new Movie { Id = 1, Title = "Film" });
+            db.Movies.Add(CreateMovie(1));
             var review = new Review { Comment = "Test Review", StarRating = 3, MovieId = 1 };
             db.Reviews.Add(review);
             await db.SaveChangesAsync();
+
+            var service = new ReviewService(db);
 
             var found = await service.GetReviewByIdAsync(review.Id);
 
@@ -86,12 +105,12 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task GetAllReviewsAsync_ShouldReturnAll()
         {
             var db = GetDbContext();
-            var service = new ReviewService(db);
-
-            db.Movies.Add(new Movie { Id = 1, Title = "Film" });
+            db.Movies.Add(CreateMovie(1));
             db.Reviews.Add(new Review { Comment = "A", StarRating = 2, MovieId = 1 });
             db.Reviews.Add(new Review { Comment = "B", StarRating = 4, MovieId = 1 });
             await db.SaveChangesAsync();
+
+            var service = new ReviewService(db);
 
             var reviews = await service.GetAllReviewsAsync();
 
@@ -102,12 +121,12 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task UpdateReviewAsync_ShouldChangeValues()
         {
             var db = GetDbContext();
-            var service = new ReviewService(db);
-
-            db.Movies.Add(new Movie { Id = 1, Title = "Film" });
+            db.Movies.Add(CreateMovie(1));
             var review = new Review { Comment = "Old Comment", StarRating = 1, MovieId = 1 };
             db.Reviews.Add(review);
             await db.SaveChangesAsync();
+
+            var service = new ReviewService(db);
 
             var updateDto = new ReviewUpdateDto
             {
@@ -128,12 +147,12 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task DeleteReviewAsync_ShouldRemoveReview()
         {
             var db = GetDbContext();
-            var service = new ReviewService(db);
-
-            db.Movies.Add(new Movie { Id = 1, Title = "Film" });
+            db.Movies.Add(CreateMovie(1));
             var review = new Review { Comment = "Löschen", StarRating = 1, MovieId = 1 };
             db.Reviews.Add(review);
             await db.SaveChangesAsync();
+
+            var service = new ReviewService(db);
 
             var result = await service.DeleteReviewAsync(review.Id);
 

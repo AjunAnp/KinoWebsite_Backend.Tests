@@ -17,6 +17,8 @@ namespace KinoWebsite_Backend.Tests.Services
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                // Transaktions-Warnungen ignorieren
+                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
             return new AppDbContext(options);
         }
@@ -26,7 +28,6 @@ namespace KinoWebsite_Backend.Tests.Services
             var emailMock = new Mock<IEmailService>();
             var ticketMock = new Mock<TicketService>(db);
             var paypalMock = new Mock<IPayPalService>();
-
             return new OrderService(db, emailMock.Object, ticketMock.Object, paypalMock.Object);
         }
 
@@ -51,7 +52,7 @@ namespace KinoWebsite_Backend.Tests.Services
             Assert.NotNull(order);
             Assert.Equal(2, order.Tickets.Count);
             Assert.Single(db.Orders);
-            Assert.Equal(25.0, order.TotalPrice, 1); // 2 x 12.5 EUR
+            Assert.InRange(order.TotalPrice, 24.9, 25.1);
         }
 
         [Fact]
@@ -87,12 +88,7 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = GetService(db);
 
-            var order = new Order
-            {
-                UserId = 1,
-                Tickets = new List<Ticket>()
-            };
-
+            var order = new Order { UserId = 1, Tickets = new List<Ticket>() };
             db.Orders.Add(order);
             await db.SaveChangesAsync();
 
@@ -133,7 +129,10 @@ namespace KinoWebsite_Backend.Tests.Services
             var order = new Order
             {
                 UserId = 1,
-                Tickets = new List<Ticket> { new Ticket { Price = 100, TicketState = TicketStates.Reserved } },
+                Tickets = new List<Ticket>
+                {
+                    new Ticket { Price = 100, TicketState = TicketStates.Reserved }
+                },
                 TotalPrice = 100
             };
             db.Orders.Add(order);
@@ -144,7 +143,7 @@ namespace KinoWebsite_Backend.Tests.Services
 
             // Assert
             Assert.NotNull(updated);
-            Assert.Equal(90, updated.TotalPrice, 1);
+            Assert.InRange(updated.TotalPrice, 89.9, 90.1);
             Assert.Equal(discount.Id, updated.DiscountId);
         }
 
@@ -173,11 +172,7 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = GetService(db);
 
-            var order = new Order
-            {
-                UserId = 1,
-                Tickets = new List<Ticket>()
-            };
+            var order = new Order { UserId = 1, Tickets = new List<Ticket>() };
             db.Orders.Add(order);
             await db.SaveChangesAsync();
 

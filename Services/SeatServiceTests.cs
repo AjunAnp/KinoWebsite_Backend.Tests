@@ -4,6 +4,7 @@ using KinoWebsite_Backend.Data;
 using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
 
 namespace KinoWebsite_Backend.Tests.Services
@@ -14,8 +15,22 @@ namespace KinoWebsite_Backend.Tests.Services
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)) // unterdrückt InMemory-Transaktionswarnungen
                 .Options;
             return new AppDbContext(options);
+        }
+
+        // Helper-Methode
+        private Seat CreateSeat(int roomId, char row, int number, string type = "Standard", bool available = true)
+        {
+            return new Seat
+            {
+                RoomId = roomId,
+                Row = row,
+                SeatNumber = number,
+                Type = type,
+                isAvailable = available
+            };
         }
 
         [Fact]
@@ -24,11 +39,11 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new SeatService(db);
 
-            var room = new Room { Name = "Saal A", Capacity = 0 };
+            var room = new Room { Name = "Saal A", Capacity = 0, isAvailable = true };
             db.Rooms.Add(room);
             await db.SaveChangesAsync();
 
-            var seat = new Seat { RoomId = room.Id, Row = 'A', SeatNumber = 1, Type = "Standard", isAvailable = true };
+            var seat = CreateSeat(room.Id, 'A', 1);
             var result = await service.CreateSeatAsync(seat);
 
             Assert.True(result.ok);
@@ -43,14 +58,14 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new SeatService(db);
 
-            var room = new Room { Name = "Saal B", Capacity = 0 };
+            var room = new Room { Name = "Saal B", Capacity = 0, isAvailable = true };
             db.Rooms.Add(room);
             await db.SaveChangesAsync();
 
-            db.Seats.Add(new Seat { RoomId = room.Id, Row = 'A', SeatNumber = 1 });
+            db.Seats.Add(CreateSeat(room.Id, 'A', 1));
             await db.SaveChangesAsync();
 
-            var seat = new Seat { RoomId = room.Id, Row = 'A', SeatNumber = 1, Type = "Standard" };
+            var seat = CreateSeat(room.Id, 'A', 1);
             var result = await service.CreateSeatAsync(seat);
 
             Assert.False(result.ok);
@@ -64,9 +79,9 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new SeatService(db);
 
-            var room = new Room { Name = "Saal C" };
+            var room = new Room { Name = "Saal C", isAvailable = true };
             db.Rooms.Add(room);
-            var seat = new Seat { Room = room, Row = 'A', SeatNumber = 1, Type = "Standard" };
+            var seat = CreateSeat(room.Id, 'A', 1);
             db.Seats.Add(seat);
             await db.SaveChangesAsync();
 
@@ -86,10 +101,12 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new SeatService(db);
 
-            var room = new Room { Name = "Saal D" };
+            var room = new Room { Name = "Saal D", isAvailable = true };
             db.Rooms.Add(room);
-            db.Seats.Add(new Seat { Room = room, Row = 'A', SeatNumber = 1, isAvailable = true });
-            db.Seats.Add(new Seat { Room = room, Row = 'A', SeatNumber = 2, isAvailable = true });
+            await db.SaveChangesAsync();
+
+            db.Seats.Add(CreateSeat(room.Id, 'A', 1));
+            db.Seats.Add(CreateSeat(room.Id, 'A', 2));
             await db.SaveChangesAsync();
 
             var count = await service.SetAvailabilityForRowAsync(room.Id, 'A', false);
@@ -105,9 +122,11 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new SeatService(db);
 
-            var room = new Room { Name = "Saal E", Capacity = 1 };
+            var room = new Room { Name = "Saal E", Capacity = 1, isAvailable = true };
             db.Rooms.Add(room);
-            var seat = new Seat { Room = room, Row = 'A', SeatNumber = 1 };
+            await db.SaveChangesAsync();
+
+            var seat = CreateSeat(room.Id, 'A', 1);
             db.Seats.Add(seat);
             await db.SaveChangesAsync();
 
@@ -124,10 +143,12 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new SeatService(db);
 
-            var room = new Room { Name = "Saal F", Capacity = 2 };
+            var room = new Room { Name = "Saal F", Capacity = 2, isAvailable = true };
             db.Rooms.Add(room);
-            db.Seats.Add(new Seat { Room = room, Row = 'A', SeatNumber = 1 });
-            db.Seats.Add(new Seat { Room = room, Row = 'A', SeatNumber = 2 });
+            await db.SaveChangesAsync();
+
+            db.Seats.Add(CreateSeat(room.Id, 'A', 1));
+            db.Seats.Add(CreateSeat(room.Id, 'A', 2));
             await db.SaveChangesAsync();
 
             var deletedCount = await service.DeleteAllSeatsInRoomAsync(room.Id);
