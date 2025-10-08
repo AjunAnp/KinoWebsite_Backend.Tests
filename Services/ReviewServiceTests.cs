@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using KinoWebsite_Backend.Data;
+using KinoWebsite_Backend.DTOs;
 using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.Services;
 using Microsoft.EntityFrameworkCore;
@@ -19,24 +21,47 @@ namespace KinoWebsite_Backend.Tests.Services
         }
 
         [Fact]
-        public async Task CreateReviewAsync_ShouldAddReview()
+        public async Task CreateReviewAsync_ShouldAddReview_WhenMovieExists()
         {
+            // Arrange
             var db = GetDbContext();
+            db.Movies.Add(new Movie { Id = 1, Title = "Testfilm" });
+            await db.SaveChangesAsync();
+
             var service = new ReviewService(db);
 
-            var review = new Review
+            var reviewDto = new ReviewCreateDto
             {
                 Comment = "Super Film!",
                 StarRating = 5,
                 MovieId = 1
             };
 
-            var created = await service.CreateReviewAsync(review);
+            // Act
+            var created = await service.CreateReviewAsync(reviewDto);
 
+            // Assert
             Assert.NotNull(created);
             Assert.Single(db.Reviews);
             Assert.Equal("Super Film!", created.Comment);
             Assert.Equal(5, created.StarRating);
+        }
+
+        [Fact]
+        public async Task CreateReviewAsync_ShouldThrow_WhenMovieDoesNotExist()
+        {
+            var db = GetDbContext();
+            var service = new ReviewService(db);
+
+            var reviewDto = new ReviewCreateDto
+            {
+                Comment = "Fehler!",
+                StarRating = 3,
+                MovieId = 99
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.CreateReviewAsync(reviewDto));
         }
 
         [Fact]
@@ -45,6 +70,7 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new ReviewService(db);
 
+            db.Movies.Add(new Movie { Id = 1, Title = "Film" });
             var review = new Review { Comment = "Test Review", StarRating = 3, MovieId = 1 };
             db.Reviews.Add(review);
             await db.SaveChangesAsync();
@@ -62,6 +88,7 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new ReviewService(db);
 
+            db.Movies.Add(new Movie { Id = 1, Title = "Film" });
             db.Reviews.Add(new Review { Comment = "A", StarRating = 2, MovieId = 1 });
             db.Reviews.Add(new Review { Comment = "B", StarRating = 4, MovieId = 1 });
             await db.SaveChangesAsync();
@@ -77,16 +104,21 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new ReviewService(db);
 
+            db.Movies.Add(new Movie { Id = 1, Title = "Film" });
             var review = new Review { Comment = "Old Comment", StarRating = 1, MovieId = 1 };
             db.Reviews.Add(review);
             await db.SaveChangesAsync();
 
-            review.Comment = "Updated Comment";
-            review.StarRating = 5;
+            var updateDto = new ReviewUpdateDto
+            {
+                Comment = "Updated Comment",
+                StarRating = 5
+            };
 
-            var result = await service.UpdateReviewAsync(review.Id, review);
+            var result = await service.UpdateReviewAsync(review.Id, updateDto);
 
             Assert.True(result);
+
             var refreshed = await service.GetReviewByIdAsync(review.Id);
             Assert.Equal("Updated Comment", refreshed.Comment);
             Assert.Equal(5, refreshed.StarRating);
@@ -98,6 +130,7 @@ namespace KinoWebsite_Backend.Tests.Services
             var db = GetDbContext();
             var service = new ReviewService(db);
 
+            db.Movies.Add(new Movie { Id = 1, Title = "Film" });
             var review = new Review { Comment = "Löschen", StarRating = 1, MovieId = 1 };
             db.Reviews.Add(review);
             await db.SaveChangesAsync();
