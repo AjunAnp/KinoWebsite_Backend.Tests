@@ -26,7 +26,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\KinoWebsite_BackendPj\KinoWebsite_Backend.csproj" />
     <ProjectReference Include="..\KinoWebsite_Backend\KinoWebsite_Backend.csproj" />
   </ItemGroup>
 
