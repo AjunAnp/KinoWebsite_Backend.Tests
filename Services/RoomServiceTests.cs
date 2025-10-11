@@ -21,7 +21,6 @@ namespace KinoWebsite_Backend.Tests.Services
             return new AppDbContext(options);
         }
 
-        // Hilfsmethode
         private Seat CreateSeat(int roomId, char row, int seatNumber)
         {
             return new Seat

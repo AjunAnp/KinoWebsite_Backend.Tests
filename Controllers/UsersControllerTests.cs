@@ -32,7 +32,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             _controller = new UsersController(_service);
         }
 
-        // Helper to hash password exactly like in UserService
         private string HashPassword(string password)
         {
             using var md5 = MD5.Create();
@@ -208,7 +207,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            _context.Entry(user).State = EntityState.Detached; // wichtig für EF Tracking
+            _context.Entry(user).State = EntityState.Detached;
 
             var dto = new UserUpdateDto
             {

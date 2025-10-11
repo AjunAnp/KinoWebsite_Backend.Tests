@@ -19,7 +19,6 @@ namespace KinoWebsite_Backend.Tests.Services
             return new AppDbContext(options);
         }
 
-        // 👇 Helper-Methode, um immer gültige Movie-Objekte zu erzeugen
         private Movie CreateMovie(string title = "Testfilm")
         {
             return new Movie
@@ -106,7 +105,6 @@ namespace KinoWebsite_Backend.Tests.Services
 
             var service = new MovieService(db);
 
-            // EF kennt dieses Objekt bereits — direkt verändern
             movie.Title = "New Title";
             movie.Description = "Updated Description";
             movie.Duration = 150;
@@ -131,7 +129,6 @@ namespace KinoWebsite_Backend.Tests.Services
             db.Movies.Add(movie);
             await db.SaveChangesAsync();
 
-            // falscher ID → sollte false liefern
             var result = await service.UpdateAsync(movie.Id + 1, movie);
 
             Assert.False(result);

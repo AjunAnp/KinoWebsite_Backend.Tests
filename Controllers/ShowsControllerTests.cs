@@ -82,7 +82,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             return show;
         }
 
-        // ---------- TESTS ----------
 
         [Fact]
         public async Task GetShows_ReturnsOk_WithList()
@@ -148,12 +147,10 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 EndUtc = DateTime.UtcNow.AddHours(3),
                 MovieId = movie.Id,
                 RoomId = room.Id
-                // BasePrice existiert im DTO evtl. nicht – bewusst weggelassen
             };
 
             var result = await _controller.CreateShow(dto);
 
-            // Prüfe dynamisch, was zurückkam:
             if (result.Result is CreatedAtActionResult created)
             {
                 var showDto = Assert.IsType<ShowDto>(created.Value);
@@ -161,7 +158,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             }
             else if (result.Result is BadRequestObjectResult bad)
             {
-                // Nur prüfen, dass ein sinnvoller Fehler zurückkam
                 Assert.NotNull(bad.Value);
                 var msg = bad.Value.ToString();
                 Assert.True(

@@ -56,9 +56,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             Cast = Array.Empty<string>()
         };
 
-        // --------------------------------------------------------------
-        // TESTS
-        // --------------------------------------------------------------
 
         [Fact]
         public async Task GetAll_ReturnsOk_WithOrders()

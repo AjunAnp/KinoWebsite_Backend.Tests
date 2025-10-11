@@ -30,7 +30,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             _controller = new TicketsController(_service);
         }
 
-        // ----------- Helper Setup -----------
 
         private Movie CreateMovie(string title = "Inception")
         {
@@ -124,7 +123,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             return ticket;
         }
 
-        // ----------- TESTS -----------
 
         [Fact]
         public async Task GetTickets_ReturnsOk_WithTickets()
@@ -178,7 +176,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             // Assert
             var ok = Assert.IsType<OkObjectResult>(result);
 
-            // FIX: Controller gibt ein anonymes Objekt zurück: { QrCode = "..." }
             var qrData = ok.Value?.GetType().GetProperty("QrCode")?.GetValue(ok.Value, null)?.ToString();
 
             Assert.NotNull(qrData);

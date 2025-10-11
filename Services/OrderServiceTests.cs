@@ -17,7 +17,7 @@ namespace KinoWebsite_Backend.Tests.Services
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
-                // Transaktions-Warnungen ignorieren
+                
                 .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
             return new AppDbContext(options);
