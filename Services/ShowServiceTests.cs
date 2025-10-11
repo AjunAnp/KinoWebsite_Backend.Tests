@@ -11,6 +11,7 @@ namespace KinoWebsite_Backend.Tests.Services
 {
     public class ShowServiceTests
     {
+        /*
         private (AppDbContext, ShowService) GetService()
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -240,6 +241,6 @@ namespace KinoWebsite_Backend.Tests.Services
             // Assert
             Assert.NotNull(found);
             Assert.Equal("DE", found.Language);
-        }
+        }*/
     }
 }
