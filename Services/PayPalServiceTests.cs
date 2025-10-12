@@ -1,109 +1,120 @@
-﻿using System.Text;
+﻿using System.Net;
+using System.Net.Http;
+using System.Text;
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
+using KinoWebsite_Backend.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
-using System.Threading.Tasks;
+using Moq;
+using Moq.Protected;
+using Xunit;
 
-namespace KinoWebsite_Backend.Services
+namespace KinoWebsite_Backend.Tests.Services
 {
-    public class PayPalService
+    public class PayPalServiceTests
     {
-        private readonly IConfiguration _configuration;
-        private readonly IHttpClientFactory _httpClientFactory;
-        private readonly ILogger<PayPalService> _logger;
-
-        public PayPalService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ILogger<PayPalService> logger)
+        private PayPalService CreateService(out Mock<HttpMessageHandler> handlerMock)
         {
-            _configuration = configuration;
-            _httpClientFactory = httpClientFactory;
-            _logger = logger;
+            var configData = new Dictionary<string, string?>
+            {
+                {"PayPalSettings:URL", "https://api.sandbox.paypal.com"},
+                {"PayPalSettings:ClientId", "dummyId"},
+                {"PayPalSettings:Secret", "dummySecret"}
+            };
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(configData)
+                .Build();
+
+            handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Strict);
+            var client = new HttpClient(handlerMock.Object);
+            var httpClientFactory = new Mock<IHttpClientFactory>();
+            httpClientFactory.Setup(_ => _.CreateClient(It.IsAny<string>())).Returns(client);
+
+            var logger = Mock.Of<ILogger<PayPalService>>();
+
+            return new PayPalService(configuration, httpClientFactory.Object, logger);
         }
 
-        public async Task<string?> CreateOrderAsync(string currency, string amount)
+       
+        [Fact]
+        public async Task CreateOrderAsync_ReturnsNull_WhenTokenFails()
         {
-            try
+            // Arrange
+            var service = CreateService(out var handlerMock);
+
+            var failResponse = new HttpResponseMessage(HttpStatusCode.BadRequest)
             {
-                string accessToken = await GetPayPalAccessToken();
-
-                if (string.IsNullOrEmpty(accessToken))
-                {
-                    _logger.LogWarning("Kein Access Token erhalten – Rückgabe null.");
-                    return null;
-                }
-
-                var url = _configuration["PaypalSettings:URL"] + "/v2/checkout/orders";
-                var client = _httpClientFactory.CreateClient();
-                client.DefaultRequestHeaders.Add("Authorization", "Bearer " + accessToken);
-
-                var orderBody = new JsonObject
-                {
-                    ["intent"] = "CAPTURE",
-                    ["purchase_units"] = new JsonArray
-                    {
-                        new JsonObject
-                        {
-                            ["amount"] = new JsonObject
-                            {
-                                ["currency_code"] = currency,
-                                ["value"] = amount
-                            }
-                        }
-                    }
-                };
-
-                var request = new HttpRequestMessage(HttpMethod.Post, url)
-                {
-                    Content = new StringContent(orderBody.ToJsonString(), Encoding.UTF8, "application/json")
-                };
-
-                var response = await client.SendAsync(request);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var error = await response.Content.ReadAsStringAsync();
-                    _logger.LogError("Fehler beim Erstellen der PayPal Order: {Error}", error);
-                    return null;
-                }
-
-                var result = await response.Content.ReadAsStringAsync();
-                var json = JsonNode.Parse(result);
-
-                return json?["id"]?.ToString() ?? "ORDER123";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Fehler in CreateOrderAsync");
-                return null;
-            }
-        }
-
-        private async Task<string> GetPayPalAccessToken()
-        {
-            var clientId = _configuration["PaypalSettings:ClientId"];
-            var secret = _configuration["PaypalSettings:Secret"];
-            var url = _configuration["PaypalSettings:URL"] + "/v1/oauth2/token";
-
-            var client = _httpClientFactory.CreateClient();
-            var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{secret}"));
-            client.DefaultRequestHeaders.Add("Authorization", "Basic " + credentials);
-
-            var request = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = new StringContent("grant_type=client_credentials", Encoding.UTF8, "application/x-www-form-urlencoded")
+                Content = new StringContent("{\"error\": \"invalid_client\"}")
             };
 
-            var response = await client.SendAsync(request);
+            handlerMock.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>()
+                )
+                .ReturnsAsync(failResponse);
 
-            if (!response.IsSuccessStatusCode)
+            // Act
+            var result = await service.CreateOrderAsync("EUR", "10.00");
+
+            // Assert
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public async Task CreateOrderAsync_ReturnsNull_WhenOrderFails()
+        {
+            // Arrange
+            var service = CreateService(out var handlerMock);
+
+            var tokenResponse = new HttpResponseMessage(HttpStatusCode.OK)
             {
-                _logger.LogError("Token konnte nicht abgerufen werden.");
-                return "";
-            }
+                Content = new StringContent("{\"access_token\": \"ABC123\"}", Encoding.UTF8, "application/json")
+            };
 
-            var result = await response.Content.ReadAsStringAsync();
-            var json = JsonNode.Parse(result);
-            return json?["access_token"]?.ToString() ?? "";
+            var failResponse = new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("{\"error\": \"invalid_request\"}")
+            };
+
+            handlerMock.Protected()
+                .SetupSequence<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>()
+                )
+                .ReturnsAsync(tokenResponse)
+                .ReturnsAsync(failResponse);
+
+            // Act
+            var result = await service.CreateOrderAsync("EUR", "10.00");
+
+            // Assert
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public async Task CreateOrderAsync_Handles_Exception_Gracefully()
+        {
+            // Arrange
+            var service = CreateService(out var handlerMock);
+
+            handlerMock.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>()
+                )
+                .ThrowsAsync(new HttpRequestException("Network failure"));
+
+            // Act
+            var result = await service.CreateOrderAsync("EUR", "10.00");
+
+            // Assert
+            Assert.Null(result);
         }
     }
 }

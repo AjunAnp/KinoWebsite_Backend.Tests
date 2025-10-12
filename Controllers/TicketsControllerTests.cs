@@ -3,11 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 using KinoWebsite_Backend.Controllers;
-using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.Services;
+using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.DTOs;
 using KinoWebsite_Backend.Data;
 
@@ -30,178 +30,126 @@ namespace KinoWebsite_Backend.Tests.Controllers
             _controller = new TicketsController(_service);
         }
 
-
-        private Movie CreateMovie(string title = "Inception")
+        private async Task<Show> AddTestShowAsync()
         {
             var movie = new Movie
             {
-                Title = title,
-                Genre = "Sci-Fi",
+                Title = "Test Movie",
+                Genre = "Action",
+                Description = "Some movie",
                 Duration = 120,
-                Description = "Dream layers",
-                Director = "Christopher Nolan",
-                ImageUrl = "http://example.com/img.jpg",
-                TrailerUrl = "http://example.com/trailer.mp4",
                 ReleaseDate = DateTime.UtcNow,
-                ImDbRating = 8.8,
-                Cast = Array.Empty<string>(),
+                TrailerUrl = "url",
+                Director = "Someone",
+                ImDbRating = 7.5,
+                Cast = new[] { "Actor" },
+                ImageUrl = "img",
                 AgeRestriction = AgeRestriction.UsK12
             };
-            _context.Movies.Add(movie);
-            _context.SaveChanges();
-            return movie;
-        }
 
-        private Room CreateRoom(string name = "Saal 1")
-        {
-            var room = new Room { Name = name, Capacity = 100, isAvailable = true };
-            _context.Rooms.Add(room);
-            _context.SaveChanges();
-            return room;
-        }
+            var room = new Room { Name = "Room 1", isAvailable = true };
 
-        private Show CreateShow(Movie movie, Room room)
-        {
             var show = new Show
             {
-                Language = "EN",
-                Is3D = false,
-                Subtitle = "none",
-                FreeSeats = 100,
+                Movie = movie,
+                Room = room,
                 StartUtc = DateTime.UtcNow,
                 EndUtc = DateTime.UtcNow.AddHours(2),
-                MovieId = movie.Id,
-                RoomId = room.Id
+                Language = "DE",
+                Subtitle = "EN",
+                BasePrice = 10.0
             };
+
             _context.Shows.Add(show);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return show;
         }
 
-        private Seat CreateSeat(Room room, char row = 'A', int seatNumber = 1)
+        private async Task<Seat> AddTestSeatAsync(Room room)
         {
             var seat = new Seat
             {
-                RoomId = room.Id,
-                Row = row,
-                SeatNumber = seatNumber,
+                Room = room,
+                Row = 'A',
+                SeatNumber = 1,
                 Type = "Standard",
                 isAvailable = true
             };
             _context.Seats.Add(seat);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return seat;
         }
-
-        private Order CreateOrder(int userId = 1)
-        {
-            var order = new Order { UserId = userId };
-            _context.Orders.Add(order);
-            _context.SaveChanges();
-            return order;
-        }
-
-        private Ticket CreateTicket()
-        {
-            var movie = CreateMovie();
-            var room = CreateRoom();
-            var show = CreateShow(movie, room);
-            var seat = CreateSeat(room);
-            var order = CreateOrder();
-
-            var ticket = new Ticket
-            {
-                ShowId = show.Id,
-                SeatId = seat.Id,
-                OrderId = order.Id,
-                Price = 15.0,
-                TicketState = TicketStates.Booked
-            };
-
-            _context.Tickets.Add(ticket);
-            _context.SaveChanges();
-            return ticket;
-        }
-
 
         [Fact]
         public async Task GetTickets_ReturnsOk_WithTickets()
         {
-            // Arrange
-            CreateTicket();
+            var show = await AddTestShowAsync();
+            var seat = await AddTestSeatAsync(show.Room);
 
-            // Act
+            _context.Tickets.AddRange(
+                new Ticket { Show = show, Seat = seat, SeatType = seat.Type, TicketState = TicketStates.Reserved, Price = 12 },
+                new Ticket { Show = show, Seat = seat, SeatType = seat.Type, TicketState = TicketStates.Available, Price = 10 }
+            );
+            await _context.SaveChangesAsync();
+
             var result = await _controller.GetTickets();
 
-            // Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
-            var list = Assert.IsAssignableFrom<IEnumerable<TicketDto>>(ok.Value);
-            Assert.Single(list);
+            var tickets = Assert.IsAssignableFrom<IEnumerable<TicketDto>>(ok.Value);
+            Assert.Equal(2, tickets.Count());
         }
 
         [Fact]
         public async Task GetTicket_ReturnsNotFound_WhenMissing()
         {
-            // Act
             var result = await _controller.GetTicket(999);
-
-            // Assert
             Assert.IsType<NotFoundResult>(result.Result);
         }
 
         [Fact]
         public async Task GetTicket_ReturnsOk_WhenExists()
         {
-            // Arrange
-            var ticket = CreateTicket();
+            var show = await AddTestShowAsync();
+            var seat = await AddTestSeatAsync(show.Room);
 
-            // Act
+            var ticket = new Ticket
+            {
+                Show = show,
+                Seat = seat,
+                SeatType = seat.Type,
+                Price = 15,
+                TicketState = TicketStates.Booked
+            };
+            _context.Tickets.Add(ticket);
+            await _context.SaveChangesAsync();
+
             var result = await _controller.GetTicket(ticket.Id);
 
-            // Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var dto = Assert.IsType<TicketDetailDto>(ok.Value);
-            Assert.Equal(ticket.Id, dto.Id);
+            Assert.Equal(ticket.Price, dto.Price);
+            Assert.Equal("Booked", dto.TicketState);
         }
 
         [Fact]
-        public async Task GetTicketQrCode_ReturnsBase64_WhenTicketExists()
+        public async Task DeleteTicket_RemovesTicket_WhenExists()
         {
-            // Arrange
-            var ticket = CreateTicket();
+            var show = await AddTestShowAsync();
+            var seat = await AddTestSeatAsync(show.Room);
 
-            // Act
-            var result = await _controller.GetTicketQrCode(ticket.Id);
+            var ticket = new Ticket
+            {
+                Show = show,
+                Seat = seat,
+                SeatType = seat.Type,
+                Price = 10,
+                TicketState = TicketStates.Available
+            };
+            _context.Tickets.Add(ticket);
+            await _context.SaveChangesAsync();
 
-            // Assert
-            var ok = Assert.IsType<OkObjectResult>(result);
-
-            var qrData = ok.Value?.GetType().GetProperty("QrCode")?.GetValue(ok.Value, null)?.ToString();
-
-            Assert.NotNull(qrData);
-            Assert.StartsWith("data:image/png;base64,", qrData);
-        }
-
-        [Fact]
-        public async Task GetTicketQrCode_ReturnsNotFound_WhenMissing()
-        {
-            // Act
-            var result = await _controller.GetTicketQrCode(999);
-
-            // Assert
-            Assert.IsType<NotFoundResult>(result);
-        }
-
-        [Fact]
-        public async Task DeleteTicket_Removes_WhenExists()
-        {
-            // Arrange
-            var ticket = CreateTicket();
-
-            // Act
             var result = await _controller.DeleteTicket(ticket.Id);
 
-            // Assert
             Assert.IsType<NoContentResult>(result);
             Assert.Empty(_context.Tickets);
         }
@@ -209,40 +157,92 @@ namespace KinoWebsite_Backend.Tests.Controllers
         [Fact]
         public async Task DeleteTicket_ReturnsNotFound_WhenMissing()
         {
-            // Act
-            var result = await _controller.DeleteTicket(999);
-
-            // Assert
+            var result = await _controller.DeleteTicket(99);
             Assert.IsType<NotFoundResult>(result);
         }
 
         [Fact]
-        public async Task GetTicketsByUserId_ReturnsOk_WhenUserHasTickets()
+        public async Task GetTicketQrCode_ReturnsOk_WithQrCode()
         {
-            // Arrange
-            var ticket = CreateTicket();
-            var userId = _context.Orders.First().UserId;
+            var show = await AddTestShowAsync();
+            var seat = await AddTestSeatAsync(show.Room);
 
-            // Act
-            var result = await _controller.GetTicketsByUserId(userId);
+            var ticket = new Ticket
+            {
+                Show = show,
+                Seat = seat,
+                SeatType = seat.Type,
+                Price = 15,
+                TicketState = TicketStates.Available
+            };
+            _context.Tickets.Add(ticket);
+            await _context.SaveChangesAsync();
 
-            // Assert
-            var ok = Assert.IsType<OkObjectResult>(result.Result);
-            var list = Assert.IsAssignableFrom<IEnumerable<TicketDetailDto>>(ok.Value);
-            Assert.Single(list);
+            var result = await _controller.GetTicketQrCode(ticket.Id);
+
+            var ok = Assert.IsType<OkObjectResult>(result);
+
+            var qrCodeProp = ok.Value.GetType().GetProperty("QrCode");
+            Assert.NotNull(qrCodeProp);
+
+            var qrValue = qrCodeProp.GetValue(ok.Value)?.ToString();
+            Assert.NotNull(qrValue);
+            Assert.StartsWith("data:image/png;base64,", qrValue);
         }
 
         [Fact]
-        public async Task GetTicketsByUserId_ReturnsOk_WhenUserHasNone()
+        public async Task GetTicketsByUserId_ReturnsOk_WhenTicketsExist()
         {
-            // Act
+            var show = await AddTestShowAsync();
+            var seat = await AddTestSeatAsync(show.Room);
+            var user = new User
+            {
+                Firstname = "Alice",
+                Lastname = "User",
+                Email = "alice@example.com",
+                Password = "pwd",
+                PhoneNumber = "123"
+            };
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            var order = new Order
+            {
+                User = user,
+                TimeOfOrder = DateTime.UtcNow,
+                TotalPrice = 10
+            };
+            _context.Orders.Add(order);
+            await _context.SaveChangesAsync();
+
+            var ticket = new Ticket
+            {
+                Show = show,
+                Seat = seat,
+                SeatType = seat.Type,
+                Price = 10,
+                Order = order,
+                TicketState = TicketStates.Reserved
+            };
+            _context.Tickets.Add(ticket);
+            await _context.SaveChangesAsync();
+
+            var result = await _controller.GetTicketsByUserId(user.Id);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var list = Assert.IsAssignableFrom<IEnumerable<TicketDetailDto>>(ok.Value);
+            Assert.Single(list);
+            Assert.Equal(10, list.First().Price);
+        }
+
+        [Fact]
+        public async Task GetTicketsByUserId_ReturnsOk_WhenNoTickets()
+        {
             var result = await _controller.GetTicketsByUserId(999);
 
-            // Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var list = Assert.IsAssignableFrom<IEnumerable<TicketDetailDto>>(ok.Value);
             Assert.Empty(list);
         }
-
     }
 }

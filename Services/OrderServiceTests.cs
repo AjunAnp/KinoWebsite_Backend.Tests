@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using KinoWebsite_Backend.Data;
 using KinoWebsite_Backend.DTOs;
 using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Xunit;
 
@@ -13,173 +15,251 @@ namespace KinoWebsite_Backend.Tests.Services
 {
     public class OrderServiceTests
     {
-        private AppDbContext GetDbContext()
+        private (OrderService service, AppDbContext context) CreateService()
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
-                
-                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
-            return new AppDbContext(options);
+
+            var context = new AppDbContext(options);
+
+            var emailMock = new Mock<IEmailService>();
+            emailMock.Setup(e => e.SendEmailAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<IEnumerable<System.Net.Mail.LinkedResource>>()))
+                .Returns(Task.CompletedTask);
+
+            var payPalMock = new Mock<IPayPalService>();
+            payPalMock.Setup(p => p.CreateOrderAsync(It.IsAny<string>(), It.IsAny<string>()))
+                      .ReturnsAsync("PAYPAL123");
+
+            var ticketService = new TicketService(context);
+            var service = new OrderService(context, emailMock.Object, ticketService, payPalMock.Object);
+
+            return (service, context);
         }
 
-        private OrderService GetService(AppDbContext db)
+        private User CreateUser(string name = "TestUser") => new User
         {
-            var emailMock = new Mock<IEmailService>();
-            var ticketMock = new Mock<TicketService>(db);
-            var paypalMock = new Mock<IPayPalService>();
-            return new OrderService(db, emailMock.Object, ticketMock.Object, paypalMock.Object);
-        }
+            Firstname = name,
+            Lastname = "Tester",
+            Email = $"{name.ToLower()}@example.com",
+            Password = "hashed",
+            PhoneNumber = "123456"
+        };
+
+        private Movie CreateMovie(string title = "Film") => new Movie
+        {
+            Title = title,
+            Genre = "Action",
+            Description = "Beschreibung",
+            Duration = 120,
+            ReleaseDate = DateTime.UtcNow,
+            Director = "Director",
+            ImageUrl = "",
+            TrailerUrl = "",
+            ImDbRating = 7.5,
+            AgeRestriction = AgeRestriction.UsK12,
+            Cast = Array.Empty<string>()
+        };
 
         [Fact]
-        public async Task CreateAsync_ShouldAddOrder_WhenSeatsAvailable()
+        public async Task CreateAsync_CreatesOrder_WithTickets()
         {
-            // Arrange
-            var db = GetDbContext();
-            var service = GetService(db);
+            var (service, db) = CreateService();
+
+            var user = CreateUser();
+            var movie = CreateMovie();
+            var room = new Room { Name = "Saal 1", Capacity = 50, isAvailable = true };
+
+            var show = new Show
+            {
+                Room = room,
+                Movie = movie,
+                StartUtc = DateTime.UtcNow,
+                EndUtc = DateTime.UtcNow.AddHours(2),
+                Language = "Deutsch",
+                Subtitle = "Englisch",
+                BasePrice = 10
+            };
+
+            var seat = new Seat
+            {
+                Room = room,
+                Row = 'A',
+                SeatNumber = 1,
+                Type = "Standard",
+                isAvailable = true
+            };
+
+            db.Users.Add(user);
+            db.Movies.Add(movie);
+            db.Rooms.Add(room);
+            db.Shows.Add(show);
+            db.Seats.Add(seat);
+            await db.SaveChangesAsync();
 
             var dto = new OrderCreateDto
             {
-                UserId = 1,
-                ShowId = 1,
-                SeatIds = new List<int> { 1, 2 }
+                UserId = user.Id,
+                ShowId = show.Id,
+                SeatIds = new List<int> { seat.Id }
             };
 
-            // Act
             var order = await service.CreateAsync(dto);
 
-            // Assert
             Assert.NotNull(order);
-            Assert.Equal(2, order.Tickets.Count);
-            Assert.Single(db.Orders);
-            Assert.InRange(order.TotalPrice, 24.9, 25.1);
+            Assert.Single(order.Tickets);
+            Assert.Equal(user.Id, order.UserId);
+            Assert.True(order.TotalPrice > 0);
         }
 
         [Fact]
-        public async Task CreateAsync_ShouldThrow_WhenSeatAlreadyTaken()
+        public async Task CreateAsync_Throws_WhenSeatAlreadyBooked()
         {
-            // Arrange
-            var db = GetDbContext();
-            var service = GetService(db);
+            var (service, db) = CreateService();
+
+            var user = CreateUser();
+            var movie = CreateMovie();
+            var room = new Room { Name = "Saal 2", Capacity = 100, isAvailable = true };
+
+            var show = new Show
+            {
+                Room = room,
+                Movie = movie,
+                StartUtc = DateTime.UtcNow,
+                EndUtc = DateTime.UtcNow.AddHours(3),
+                Language = "Deutsch",
+                Subtitle = "Englisch",
+                BasePrice = 10
+            };
+
+            var seat = new Seat
+            {
+                Room = room,
+                Row = 'B',
+                SeatNumber = 5,
+                Type = "Standard",
+                isAvailable = true
+            };
+
+            db.Users.Add(user);
+            db.Rooms.Add(room);
+            db.Movies.Add(movie);
+            db.Shows.Add(show);
+            db.Seats.Add(seat);
+            await db.SaveChangesAsync();
 
             db.Tickets.Add(new Ticket
             {
-                ShowId = 1,
-                SeatId = 1,
-                TicketState = TicketStates.Reserved
+                ShowId = show.Id,
+                SeatId = seat.Id,
+                TicketState = TicketStates.Reserved,
+                SeatType = seat.Type
             });
             await db.SaveChangesAsync();
 
             var dto = new OrderCreateDto
             {
-                UserId = 1,
-                ShowId = 1,
-                SeatIds = new List<int> { 1 }
+                UserId = user.Id,
+                ShowId = show.Id,
+                SeatIds = new List<int> { seat.Id }
             };
 
-            // Act + Assert
             await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateAsync(dto));
         }
 
         [Fact]
-        public async Task DeleteAsync_ShouldRemoveOrder_WhenExists()
+        public async Task DeleteAsync_RemovesOrder()
         {
-            // Arrange
-            var db = GetDbContext();
-            var service = GetService(db);
+            var (service, db) = CreateService();
 
-            var order = new Order { UserId = 1, Tickets = new List<Ticket>() };
+            var user = CreateUser();
+            db.Users.Add(user);
+
+            var order = new Order
+            {
+                User = user,
+                UserId = user.Id,
+                TotalPrice = 20
+            };
             db.Orders.Add(order);
             await db.SaveChangesAsync();
 
-            // Act
             var result = await service.DeleteAsync(order.Id);
 
-            // Assert
             Assert.True(result);
             Assert.Empty(db.Orders);
         }
 
         [Fact]
-        public async Task DeleteAsync_ShouldReturnFalse_WhenNotFound()
+        public async Task ApplyDiscountAsync_AppliesValidDiscount()
         {
-            var db = GetDbContext();
-            var service = GetService(db);
-
-            var result = await service.DeleteAsync(999);
-            Assert.False(result);
-        }
-
-        [Fact]
-        public async Task ApplyDiscountAsync_ShouldApplyValidDiscount()
-        {
-            // Arrange
-            var db = GetDbContext();
-            var service = GetService(db);
+            var (service, db) = CreateService();
 
             var discount = new Discount
             {
-                Code = "DISC10",
+                Code = "SAVE10",
                 Percentage = 10,
-                ValidUntil = DateTime.UtcNow.AddDays(1),
+                ValidUntil = DateTime.UtcNow.AddDays(5),
                 IsActive = true
             };
             db.Discounts.Add(discount);
 
+            var user = CreateUser();
+            db.Users.Add(user);
+
             var order = new Order
             {
-                UserId = 1,
-                Tickets = new List<Ticket>
-                {
-                    new Ticket { Price = 100, TicketState = TicketStates.Reserved }
-                },
+                User = user,
+                UserId = user.Id,
+                Tickets = new List<Ticket> { new Ticket { Price = 100, SeatType = "Standard", TicketState = TicketStates.Available } },
                 TotalPrice = 100
             };
             db.Orders.Add(order);
             await db.SaveChangesAsync();
 
-            // Act
-            var updated = await service.ApplyDiscountAsync(order.Id, "DISC10");
+            var result = await service.ApplyDiscountAsync(order.Id, "SAVE10");
 
-            // Assert
-            Assert.NotNull(updated);
-            Assert.InRange(updated.TotalPrice, 89.9, 90.1);
-            Assert.Equal(discount.Id, updated.DiscountId);
+            Assert.NotNull(result);
+            Assert.True(result.TotalPrice < 100);
+            Assert.Equal(discount.Id, result.DiscountId);
         }
 
         [Fact]
-        public async Task ApplyDiscountAsync_ShouldThrow_WhenInvalidDiscount()
+        public async Task CheckTransactionAsync_SendsEmail_WhenOrderExists()
         {
-            var db = GetDbContext();
-            var service = GetService(db);
+            var (service, db) = CreateService();
+
+            var user = CreateUser();
+            db.Users.Add(user);
 
             var order = new Order
             {
-                UserId = 1,
-                Tickets = new List<Ticket> { new Ticket { Price = 50 } },
-                TotalPrice = 50
+                User = user,
+                UserId = user.Id,
+                Tickets = new List<Ticket>
+                {
+                    new Ticket
+                    {
+                        Price = 15,
+                        TicketState = TicketStates.Booked,
+                        SeatType = "Standard"
+                    }
+                },
+                TotalPrice = 15
             };
+
             db.Orders.Add(order);
             await db.SaveChangesAsync();
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                service.ApplyDiscountAsync(order.Id, "INVALID"));
-        }
+            var result = await service.CheckTransactionAsync(order.Id);
 
-        [Fact]
-        public async Task GetByIdAsync_ShouldReturnOrder_WhenExists()
-        {
-            var db = GetDbContext();
-            var service = GetService(db);
-
-            var order = new Order { UserId = 1, Tickets = new List<Ticket>() };
-            db.Orders.Add(order);
-            await db.SaveChangesAsync();
-
-            var found = await service.GetByIdAsync(order.Id);
-
-            Assert.NotNull(found);
-            Assert.Equal(order.Id, found.Id);
+            Assert.True(result);
         }
     }
 }

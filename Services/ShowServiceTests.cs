@@ -1,246 +1,224 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using Xunit;
+using Microsoft.EntityFrameworkCore;
 using KinoWebsite_Backend.Data;
 using KinoWebsite_Backend.Models;
+using KinoWebsite_Backend.DTOs;
 using KinoWebsite_Backend.Services;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Xunit;
+using Moq;
+using Microsoft.Extensions.Logging;
 
 namespace KinoWebsite_Backend.Tests.Services
 {
     public class ShowServiceTests
     {
-        /*
-        private (AppDbContext, ShowService) GetService()
+        private readonly AppDbContext _context;
+        private readonly Mock<RoomService> _roomServiceMock;
+        private readonly ShowService _service;
+
+        public ShowServiceTests()
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
-                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning)) // 👈 suppress TransactionIgnoredWarning
                 .Options;
 
-            var db = new AppDbContext(options);
-            var roomService = new RoomService(db);
-            return (db, new ShowService(db, roomService));
+            _context = new AppDbContext(options);
+            _roomServiceMock = new Mock<RoomService>(null);
+            _service = new ShowService(_context, _roomServiceMock.Object);
         }
 
-        [Fact]
-        public async Task CreateShowAsync_ShouldAddShow()
+
+        private Movie CreateTestMovie()
         {
-            var (db, service) = GetService();
-
-            var movie = new Movie
+            return new Movie
             {
-                Title = "Inception",
-                Genre = "Thriller",
-                Description = "Dreams",
-                Duration = 148,
-                ReleaseDate = DateTime.UtcNow,
-                TrailerUrl = "",
-                Director = "Nolan",
-                ImDbRating = 9.0,
-                Cast = Array.Empty<string>(),
-                ImageUrl = "",
-                AgeRestriction = AgeRestriction.UsK12
-            };
-
-            var room = new Room { Name = "Saal 1", isAvailable = true };
-            db.Movies.Add(movie);
-            db.Rooms.Add(room);
-            await db.SaveChangesAsync();
-
-            var show = new Show
-            {
-                MovieId = movie.Id,
-                RoomId = room.Id,
-                Language = "Deutsch",
-                Subtitle = "Englisch",
-                StartUtc = DateTime.UtcNow,
-                EndUtc = DateTime.UtcNow.AddHours(2)
-            };
-
-            var created = await service.CreateShowAsync(show);
-
-            Assert.NotNull(created);
-            Assert.Single(db.Shows);
-        }
-
-        [Fact]
-        public async Task CreateShowAsync_ShouldThrow_WhenEndBeforeStart()
-        {
-            var (db, service) = GetService();
-
-            var movie = new Movie
-            {
-                Title = "Bad Show",
-                Genre = "Drama",
-                Description = "",
-                Duration = 120,
-                ReleaseDate = DateTime.UtcNow,
-                TrailerUrl = "",
-                Director = "Someone",
-                ImDbRating = 5.0,
-                Cast = Array.Empty<string>(),
-                ImageUrl = "",
-                AgeRestriction = AgeRestriction.UsK6
-            };
-
-            var room = new Room { Name = "Saal 2", isAvailable = true };
-            db.Movies.Add(movie);
-            db.Rooms.Add(room);
-            await db.SaveChangesAsync();
-
-            var show = new Show
-            {
-                MovieId = movie.Id,
-                RoomId = room.Id,
-                Language = "Deutsch",
-                Subtitle = "Englisch",
-                StartUtc = DateTime.UtcNow,
-                EndUtc = DateTime.UtcNow.AddMinutes(-10)
-            };
-
-            await Assert.ThrowsAsync<ArgumentException>(() => service.CreateShowAsync(show));
-        }
-
-        [Fact]
-        public async Task UpdateShowAsync_ShouldModifyShow()
-        {
-            var (db, service) = GetService();
-
-            var movie = new Movie
-            {
-                Title = "Old",
+                Title = "Matrix",
+                Description = "Testfilm",
+                Director = "Test Regisseur",
                 Genre = "Action",
-                Description = "",
-                Duration = 100,
-                ReleaseDate = DateTime.UtcNow,
-                TrailerUrl = "",
-                Director = "Director",
-                ImDbRating = 6.5,
-                Cast = Array.Empty<string>(),
-                ImageUrl = "",
-                AgeRestriction = AgeRestriction.UsK12
+                ImageUrl = "https://example.com/poster.jpg",
+                TrailerUrl = "https://example.com/trailer.mp4",
+                Cast = Array.Empty<string>()
             };
+        }
 
-            var room = new Room { Name = "Saal 3", isAvailable = true };
-            db.Movies.Add(movie);
-            db.Rooms.Add(room);
+        private Room CreateTestRoom()
+        {
+            return new Room { Name = "Saal 1" };
+        }
+        
 
-            var show = new Show
+        [Fact]
+        public async Task CreateShowAsync_Should_Create_Show_When_Valid()
+        {
+            var movie = CreateTestMovie();
+            var room = CreateTestRoom();
+            _context.Movies.Add(movie);
+            _context.Rooms.Add(room);
+            await _context.SaveChangesAsync();
+
+            var dto = new ShowCreateDto
             {
-                Movie = movie,
-                Room = room,
                 Language = "DE",
+                Is3D = false,
                 Subtitle = "EN",
-                StartUtc = DateTime.UtcNow,
-                EndUtc = DateTime.UtcNow.AddHours(2)
-            };
-
-            db.Shows.Add(show);
-            await db.SaveChangesAsync();
-
-            show.Language = "EN";
-            show.EndUtc = show.StartUtc.AddHours(3);
-
-            var result = await service.UpdateShowAsync(show.Id, show);
-
-            Assert.True(result);
-            var refreshed = await db.Shows.FindAsync(show.Id);
-            Assert.Equal("EN", refreshed.Language);
-        }
-
-        [Fact]
-        public async Task DeleteShowAsync_ShouldRemoveShow()
-        {
-            var (db, service) = GetService();
-
-            var show = new Show
-            {
-                Language = "Deutsch",
-                Subtitle = "Englisch",
-                StartUtc = DateTime.UtcNow,
-                EndUtc = DateTime.UtcNow.AddHours(1)
-            };
-
-            db.Shows.Add(show);
-            await db.SaveChangesAsync();
-
-            var result = await service.DeleteShowAsync(show.Id);
-
-            Assert.True(result);
-            Assert.Empty(db.Shows);
-        }
-
-        [Fact]
-        public async Task StartShowAsync_ShouldInvalidateReservedTickets()
-        {
-            var (db, service) = GetService();
-
-            var show = new Show
-            {
-                Language = "Deutsch",
-                Subtitle = "Englisch",
-                StartUtc = DateTime.UtcNow,
-                EndUtc = DateTime.UtcNow.AddHours(1)
-            };
-
-            db.Shows.Add(show);
-            db.Tickets.Add(new Ticket { Show = show, TicketState = TicketStates.Reserved });
-            await db.SaveChangesAsync();
-
-            var result = await service.StartShowAsync(show.Id);
-
-            Assert.True(result);
-            var ticket = await db.Tickets.FirstAsync();
-            Assert.Equal(TicketStates.Invalid, ticket.TicketState);
-        }
-
-        [Fact]
-        public async Task GetShowByIdAsync_ShouldReturnShow()
-        {
-            var (db, service) = GetService();
-
-            // Arrange
-            var movie = new Movie
-            {
-                Title = "Interstellar",
-                Genre = "Sci-Fi",
-                Description = "Space adventure",
-                Duration = 169,
-                ReleaseDate = DateTime.UtcNow,
-                TrailerUrl = "",
-                Director = "Christopher Nolan",
-                ImDbRating = 8.6,
-                Cast = Array.Empty<string>(),
-                ImageUrl = "",
-                AgeRestriction = AgeRestriction.UsK12
-            };
-
-            var room = new Room { Name = "Saal X", isAvailable = true };
-            db.Movies.Add(movie);
-            db.Rooms.Add(room);
-            await db.SaveChangesAsync();
-
-            var show = new Show
-            {
+                StartUtc = DateTime.UtcNow.AddHours(1),
+                EndUtc = DateTime.UtcNow.AddHours(3),
                 MovieId = movie.Id,
                 RoomId = room.Id,
-                Language = "DE",
-                Subtitle = "EN",
-                StartUtc = DateTime.UtcNow,
-                EndUtc = DateTime.UtcNow.AddHours(1)
+                BasePrice = 10.5
             };
 
-            db.Shows.Add(show);
-            await db.SaveChangesAsync();
+            var result = await _service.CreateShowAsync(dto);
 
-            // Act
-            var found = await service.GetShowByIdAsync(show.Id);
+            Assert.NotNull(result);
+            Assert.Equal(dto.MovieId, result.MovieId);
+            Assert.Equal(dto.RoomId, result.RoomId);
+            Assert.Equal(1, await _context.Shows.CountAsync());
+        }
 
-            // Assert
-            Assert.NotNull(found);
-            Assert.Equal("DE", found.Language);
-        }*/
+        [Fact]
+        public async Task CreateShowAsync_Should_Throw_When_End_Before_Start()
+        {
+            var dto = new ShowCreateDto
+            {
+                Language = "DE",
+                Is3D = false,
+                Subtitle = "EN",
+                StartUtc = DateTime.UtcNow.AddHours(3),
+                EndUtc = DateTime.UtcNow.AddHours(2),
+                MovieId = 1,
+                RoomId = 1,
+                BasePrice = 10.0
+            };
+
+            await Assert.ThrowsAsync<ArgumentException>(() => _service.CreateShowAsync(dto));
+        }
+
+        [Fact]
+        public async Task CreateShowAsync_Should_Throw_When_Overlapping()
+        {
+            var movie = CreateTestMovie();
+            var room = CreateTestRoom();
+            _context.Movies.Add(movie);
+            _context.Rooms.Add(room);
+            await _context.SaveChangesAsync();
+
+            var existing = new Show
+            {
+                Language = "EN",
+                Subtitle = "DE",
+                StartUtc = DateTime.UtcNow.AddHours(1),
+                EndUtc = DateTime.UtcNow.AddHours(3),
+                RoomId = room.Id,
+                MovieId = movie.Id
+            };
+            _context.Shows.Add(existing);
+            await _context.SaveChangesAsync();
+
+            var dto = new ShowCreateDto
+            {
+                Language = "DE",
+                Subtitle = "EN",
+                StartUtc = DateTime.UtcNow.AddHours(2),
+                EndUtc = DateTime.UtcNow.AddHours(4),
+                MovieId = movie.Id,
+                RoomId = room.Id
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateShowAsync(dto));
+        }
+
+        [Fact]
+        public async Task UpdateShowAsync_Should_Update_Existing_Show()
+        {
+            var show = new Show
+            {
+                Language = "EN",
+                Subtitle = "None",
+                Is3D = false,
+                StartUtc = DateTime.UtcNow.AddHours(1),
+                EndUtc = DateTime.UtcNow.AddHours(2),
+                MovieId = 1,
+                RoomId = 1,
+                BasePrice = 10
+            };
+            _context.Shows.Add(show);
+            await _context.SaveChangesAsync();
+
+            var dto = new ShowUpdateDto
+            {
+                Language = "DE",
+                Is3D = true,
+                Subtitle = "EN",
+                StartUtc = DateTime.UtcNow.AddHours(1),
+                EndUtc = DateTime.UtcNow.AddHours(3),
+                MovieId = 1,
+                RoomId = 1,
+                BasePrice = 12
+            };
+
+            await _service.UpdateShowAsync(show.Id, dto);
+
+            var updated = await _context.Shows.FindAsync(show.Id);
+            Assert.Equal("DE", updated.Language);
+            Assert.True(updated.Is3D);
+            Assert.Equal(12, updated.BasePrice);
+        }
+
+        [Fact]
+        public async Task DeleteShowAsync_Should_Remove_Show()
+        {
+            var show = new Show
+            {
+                Language = "EN",
+                Subtitle = "DE",
+                StartUtc = DateTime.UtcNow.AddHours(1),
+                EndUtc = DateTime.UtcNow.AddHours(2),
+                MovieId = 1,
+                RoomId = 1
+            };
+            _context.Shows.Add(show);
+            await _context.SaveChangesAsync();
+
+            var result = await _service.DeleteShowAsync(show.Id);
+
+            Assert.True(result);
+            Assert.Empty(_context.Shows);
+        }
+
+        [Fact]
+        public async Task StartShowAsync_Should_Invalidate_Reserved_Tickets()
+        {
+            var show = new Show
+            {
+                Language = "EN",
+                Subtitle = "DE",
+                StartUtc = DateTime.UtcNow,
+                EndUtc = DateTime.UtcNow.AddHours(2),
+                MovieId = 1,
+                RoomId = 1
+            };
+            _context.Shows.Add(show);
+            await _context.SaveChangesAsync();
+
+            var ticket = new Ticket
+            {
+                ShowId = show.Id,
+                TicketState = TicketStates.Reserved,
+                SeatType = "Standard",
+                SeatId = 1
+            };
+            _context.Tickets.Add(ticket);
+            await _context.SaveChangesAsync();
+
+            await _service.StartShowAsync(show.Id);
+
+            var updatedTicket = await _context.Tickets.FindAsync(ticket.Id);
+            Assert.Equal(TicketStates.Invalid, updatedTicket.TicketState);
+        }
     }
 }

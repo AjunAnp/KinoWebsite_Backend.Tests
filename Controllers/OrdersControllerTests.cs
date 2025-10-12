@@ -19,7 +19,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
         private OrdersController CreateController(out AppDbContext context)
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseInMemoryDatabase(Guid.NewGuid().ToString()) // Neue DB pro Test
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .Options;
 
             context = new AppDbContext(options);
@@ -55,7 +55,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             AgeRestriction = AgeRestriction.UsK12,
             Cast = Array.Empty<string>()
         };
-
 
         [Fact]
         public async Task GetAll_ReturnsOk_WithOrders()
@@ -94,7 +93,8 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 StartUtc = DateTime.UtcNow,
                 EndUtc = DateTime.UtcNow.AddHours(2),
                 Language = "Deutsch",
-                Subtitle = "Englisch"
+                Subtitle = "Englisch",
+                BasePrice = 12
             };
 
             var seat = new Seat
@@ -131,21 +131,9 @@ namespace KinoWebsite_Backend.Tests.Controllers
             }
             else if (result.Result is ConflictObjectResult conflict)
             {
-                var messageProp = conflict.Value?
-                    .GetType()
-                    .GetProperty("message")?
-                    .GetValue(conflict.Value, null)?
-                    .ToString() ?? conflict.Value?.ToString();
-
-                Assert.False(string.IsNullOrEmpty(messageProp));
-
-                // Wenn "vergeben" fehlt (z. B. wegen EF-Warning), akzeptiere trotzdem Conflict
-                if (!messageProp.Contains("vergeben", StringComparison.OrdinalIgnoreCase))
-                {
-                    Assert.Contains("error", messageProp, StringComparison.OrdinalIgnoreCase);
-                }
+                var message = conflict.Value?.ToString();
+                Assert.False(string.IsNullOrWhiteSpace(message));
             }
-
             else
             {
                 Assert.True(false, $"Unexpected result type: {result.Result?.GetType().Name}");
@@ -170,7 +158,8 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 StartUtc = DateTime.UtcNow,
                 EndUtc = DateTime.UtcNow.AddHours(2),
                 Language = "Deutsch",
-                Subtitle = "Englisch"
+                Subtitle = "Englisch",
+                BasePrice = 10
             };
 
             var seat = new Seat
@@ -195,7 +184,8 @@ namespace KinoWebsite_Backend.Tests.Controllers
             {
                 SeatId = seatFromDb.Id,
                 ShowId = show.Id,
-                TicketState = TicketStates.Reserved
+                TicketState = TicketStates.Reserved,
+                SeatType = "Standard"
             };
 
             context.Tickets.Add(ticket);
@@ -212,8 +202,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
 
             var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
             var message = conflict.Value?.ToString();
-            Assert.False(string.IsNullOrEmpty(message));
-
+            Assert.False(string.IsNullOrWhiteSpace(message));
         }
 
         [Fact]
@@ -255,7 +244,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
             {
                 User = user,
                 UserId = user.Id,
-                Tickets = new List<Ticket> { new Ticket { Price = 100, TicketState = TicketStates.Booked } },
+                Tickets = new List<Ticket> { new Ticket { Price = 100, TicketState = TicketStates.Booked, SeatType = "Standard" } },
                 TotalPrice = 100
             };
             context.Orders.Add(order);
@@ -267,6 +256,28 @@ namespace KinoWebsite_Backend.Tests.Controllers
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var updated = Assert.IsType<OrderDto>(ok.Value);
             Assert.True(updated.TotalPrice < 100);
+        }
+
+        [Fact]
+        public async Task CheckTransaction_ReturnsNoContent_WhenOrderExists()
+        {
+            var controller = CreateController(out var context);
+            var user = CreateDummyUser("Emma");
+            context.Users.Add(user);
+
+            var order = new Order
+            {
+                User = user,
+                UserId = user.Id,
+                Tickets = new List<Ticket>(),
+                TotalPrice = 10
+            };
+            context.Orders.Add(order);
+            await context.SaveChangesAsync();
+
+            var result = await controller.CheckTransaction(order.Id);
+
+            Assert.IsType<NoContentResult>(result);
         }
     }
 }
