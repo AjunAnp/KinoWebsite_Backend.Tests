@@ -30,6 +30,10 @@ namespace KinoWebsite_Backend.Tests.Controllers
             _controller = new TicketsController(_service);
         }
 
+        // ------------------------------------------------------
+        //                     HILFSMETHODEN
+        // ------------------------------------------------------
+
         private async Task<Show> AddTestShowAsync()
         {
             var movie = new Movie
@@ -80,6 +84,10 @@ namespace KinoWebsite_Backend.Tests.Controllers
             return seat;
         }
 
+        // ------------------------------------------------------
+        //                      TESTS
+        // ------------------------------------------------------
+
         [Fact]
         public async Task GetTickets_ReturnsOk_WithTickets()
         {
@@ -95,8 +103,9 @@ namespace KinoWebsite_Backend.Tests.Controllers
             var result = await _controller.GetTickets();
 
             var ok = Assert.IsType<OkObjectResult>(result.Result);
-            var tickets = Assert.IsAssignableFrom<IEnumerable<TicketDto>>(ok.Value);
-            Assert.Equal(2, tickets.Count());
+            var tickets = (ok.Value as IEnumerable<TicketDto>)?.ToList();
+            Assert.NotNull(tickets);
+            Assert.Equal(2, tickets.Count);
         }
 
         [Fact]
@@ -181,7 +190,6 @@ namespace KinoWebsite_Backend.Tests.Controllers
             var result = await _controller.GetTicketQrCode(ticket.Id);
 
             var ok = Assert.IsType<OkObjectResult>(result);
-
             var qrCodeProp = ok.Value.GetType().GetProperty("QrCode");
             Assert.NotNull(qrCodeProp);
 
@@ -230,9 +238,12 @@ namespace KinoWebsite_Backend.Tests.Controllers
             var result = await _controller.GetTicketsByUserId(user.Id);
 
             var ok = Assert.IsType<OkObjectResult>(result.Result);
-            var list = Assert.IsAssignableFrom<IEnumerable<TicketDetailDto>>(ok.Value);
+            var list = (ok.Value as IEnumerable<TicketDetailWithMovieDto>)?.ToList();
+
+            Assert.NotNull(list);
             Assert.Single(list);
             Assert.Equal(10, list.First().Price);
+            Assert.NotNull(list.First().Show.Movie);
         }
 
         [Fact]
@@ -241,8 +252,41 @@ namespace KinoWebsite_Backend.Tests.Controllers
             var result = await _controller.GetTicketsByUserId(999);
 
             var ok = Assert.IsType<OkObjectResult>(result.Result);
-            var list = Assert.IsAssignableFrom<IEnumerable<TicketDetailDto>>(ok.Value);
+            var list = (ok.Value as IEnumerable<TicketDetailWithMovieDto>)?.ToList();
+
+            Assert.NotNull(list);
             Assert.Empty(list);
+        }
+
+        [Fact]
+        public async Task UseTicket_ReturnsNoContent_WhenSuccessful()
+        {
+            var show = await AddTestShowAsync();
+            var seat = await AddTestSeatAsync(show.Room);
+
+            var ticket = new Ticket
+            {
+                Show = show,
+                Seat = seat,
+                SeatType = seat.Type,
+                Price = 20,
+                TicketState = TicketStates.Booked
+            };
+
+            _context.Tickets.Add(ticket);
+            await _context.SaveChangesAsync();
+
+            var result = await _controller.UseTicket(ticket.Id);
+
+            Assert.IsType<NoContentResult>(result);
+        }
+
+
+        [Fact]
+        public async Task UseTicket_ReturnsNotFound_WhenMissing()
+        {
+            var result = await _controller.UseTicket(999);
+            Assert.IsType<NotFoundResult>(result);
         }
     }
 }

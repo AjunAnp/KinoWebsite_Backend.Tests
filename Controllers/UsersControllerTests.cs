@@ -9,6 +9,8 @@ using KinoWebsite_Backend.Services;
 using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.DTOs;
 using KinoWebsite_Backend.Data;
+using Microsoft.Extensions.Configuration;
+using Moq;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,9 +28,17 @@ namespace KinoWebsite_Backend.Tests.Controllers
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .Options;
-
             _context = new AppDbContext(options);
-            //_service = new UserService(_context);
+
+            var mockEmail = new Mock<IEmailService>();
+
+            var configData = new Dictionary<string, string>
+            {
+                { "PasswordReset:SecretKey", "TEST_SECRET_KEY_123" }
+            };
+            var config = new ConfigurationBuilder().AddInMemoryCollection(configData).Build();
+
+            _service = new UserService(_context, mockEmail.Object, config);
             _controller = new UsersController(_service);
         }
 
@@ -37,35 +47,20 @@ namespace KinoWebsite_Backend.Tests.Controllers
             using var md5 = MD5.Create();
             var bytes = Encoding.UTF8.GetBytes(password);
             var hash = md5.ComputeHash(bytes);
-            return Convert.ToHexString(hash); // matches UserService
+            return Convert.ToHexString(hash);
         }
 
         [Fact]
         public async Task GetUsers_ReturnsOk_WithListOfUsers()
         {
-            // Arrange
-            _context.Users.Add(new User
-            {
-                Firstname = "John",
-                Lastname = "Doe",
-                Email = "john@example.com",
-                Password = "hashed",
-                PhoneNumber = "12345"
-            });
-            _context.Users.Add(new User
-            {
-                Firstname = "Jane",
-                Lastname = "Smith",
-                Email = "jane@example.com",
-                Password = "hashed2",
-                PhoneNumber = "67890"
-            });
+            _context.Users.AddRange(
+                new User { Firstname = "John", Lastname = "Doe", Email = "john@example.com", Password = "pw", PhoneNumber = "123" },
+                new User { Firstname = "Jane", Lastname = "Smith", Email = "jane@example.com", Password = "pw", PhoneNumber = "456" }
+            );
             await _context.SaveChangesAsync();
 
-            // Act
             var result = await _controller.GetUsers();
 
-            // Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var users = Assert.IsAssignableFrom<IEnumerable<UserDto>>(ok.Value);
             Assert.Equal(2, users.Count());
@@ -74,7 +69,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
         [Fact]
         public async Task GetUser_ReturnsNotFound_WhenUserDoesNotExist()
         {
-            var result = await _controller.GetUser(99);
+            var result = await _controller.GetUser(999);
             Assert.IsType<NotFoundResult>(result.Result);
         }
 
@@ -86,8 +81,8 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 Firstname = "Max",
                 Lastname = "Mustermann",
                 Email = "max@example.com",
-                Password = "hashed",
-                PhoneNumber = "123"
+                Password = "pw",
+                PhoneNumber = "000"
             };
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
@@ -127,8 +122,8 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 Firstname = "Tom",
                 Lastname = "Tester",
                 Email = "tom@example.com",
-                Password = "hashed",
-                PhoneNumber = "1111"
+                Password = "pw",
+                PhoneNumber = "999"
             });
             await _context.SaveChangesAsync();
 
@@ -136,9 +131,9 @@ namespace KinoWebsite_Backend.Tests.Controllers
             {
                 Firstname = "Tom",
                 Lastname = "Tester2",
-                Email = "tom@example.com", // duplicate email
+                Email = "tom@example.com",
                 Password = "pass",
-                PhoneNumber = "2222"
+                PhoneNumber = "111"
             };
 
             var result = await _controller.Register(dto);
@@ -150,28 +145,21 @@ namespace KinoWebsite_Backend.Tests.Controllers
         [Fact]
         public async Task Login_ReturnsOk_WhenCredentialsCorrect()
         {
-            // Arrange
-            var hashedPassword = HashPassword("secret");
+            var hashed = HashPassword("secret");
             _context.Users.Add(new User
             {
                 Firstname = "Lena",
                 Lastname = "Login",
                 Email = "lena@example.com",
-                Password = hashedPassword,
+                Password = hashed,
                 PhoneNumber = "123"
             });
             await _context.SaveChangesAsync();
 
-            var dto = new UserLoginDto
-            {
-                Email = "lena@example.com",
-                Password = "secret"
-            };
+            var dto = new UserLoginDto { Email = "lena@example.com", Password = "secret" };
 
-            // Act
             var result = await _controller.Login(dto);
 
-            // Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
             var userDto = Assert.IsType<UserDto>(ok.Value);
             Assert.Equal("Lena", userDto.Firstname);
@@ -181,11 +169,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
         [Fact]
         public async Task Login_ReturnsUnauthorized_WhenInvalidCredentials()
         {
-            var dto = new UserLoginDto
-            {
-                Email = "nope@example.com",
-                Password = "wrong"
-            };
+            var dto = new UserLoginDto { Email = "wrong@example.com", Password = "nopass" };
 
             var result = await _controller.Login(dto);
 
@@ -201,19 +185,18 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 Firstname = "Old",
                 Lastname = "Name",
                 Email = "old@example.com",
-                Password = "p",
+                Password = "pw",
                 PhoneNumber = "000"
             };
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            _context.Entry(user).State = EntityState.Detached;
-
             var dto = new UserUpdateDto
             {
                 Firstname = "New",
                 Lastname = "Name",
-                PhoneNumber = "111"
+                PhoneNumber = "111",
+                email = "new@example.com"
             };
 
             var result = await _controller.UpdateUser(user.Id, dto);
@@ -221,6 +204,8 @@ namespace KinoWebsite_Backend.Tests.Controllers
             Assert.IsType<NoContentResult>(result);
             var updated = await _context.Users.FindAsync(user.Id);
             Assert.Equal("New", updated.Firstname);
+            Assert.Equal("new@example.com", updated.Email);
+            Assert.Equal("111", updated.PhoneNumber);
         }
 
         [Fact]
@@ -228,12 +213,13 @@ namespace KinoWebsite_Backend.Tests.Controllers
         {
             var dto = new UserUpdateDto
             {
-                Firstname = "New",
-                Lastname = "Name",
-                PhoneNumber = "111"
+                Firstname = "X",
+                Lastname = "Y",
+                PhoneNumber = "999"
             };
 
             var result = await _controller.UpdateUser(99, dto);
+
             Assert.IsType<NotFoundResult>(result);
         }
 
@@ -242,11 +228,11 @@ namespace KinoWebsite_Backend.Tests.Controllers
         {
             var user = new User
             {
-                Firstname = "ToDelete",
+                Firstname = "Del",
                 Lastname = "User",
-                Email = "delete@example.com",
-                Password = "p",
-                PhoneNumber = "000"
+                Email = "del@example.com",
+                Password = "pw",
+                PhoneNumber = "555"
             };
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
@@ -260,7 +246,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
         [Fact]
         public async Task DeleteUser_ReturnsNotFound_WhenNotExists()
         {
-            var result = await _controller.DeleteUser(99);
+            var result = await _controller.DeleteUser(999);
             Assert.IsType<NotFoundResult>(result);
         }
     }

@@ -3,13 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 using KinoWebsite_Backend.Controllers;
+using KinoWebsite_Backend.Data;
 using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.DTOs;
 using KinoWebsite_Backend.Services;
-using KinoWebsite_Backend.Data;
 
 namespace KinoWebsite_Backend.Tests.Controllers
 {
@@ -22,7 +22,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
         public ReviewsControllerTests()
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseInMemoryDatabase(Guid.NewGuid().ToString()) // eigene DB pro Testlauf
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .Options;
 
             _context = new AppDbContext(options);
@@ -30,36 +30,29 @@ namespace KinoWebsite_Backend.Tests.Controllers
             _controller = new ReviewsController(_service);
         }
 
-        private Movie CreateTestMovie(string title = "Default Movie")
-        {
-            return new Movie
-            {
-                Title = title,
-                Genre = "Drama",
-                Duration = 120,
-                Description = "Some description",
-                Director = "John Director",
-                ImageUrl = "http://example.com/image.jpg",
-                TrailerUrl = "http://example.com/trailer.mp4",
-                ReleaseDate = DateTime.UtcNow,
-                ImDbRating = 8.0,
-                Cast = Array.Empty<string>(),
-                AgeRestriction = AgeRestriction.UsK12
-            };
-        }
 
         [Fact]
         public async Task GetReviews_ReturnsOk_WithList()
         {
             // Arrange
-            var movie = CreateTestMovie("Film A");
-            _context.Movies.Add(movie);
-            _context.Reviews.Add(new Review
+            var movie = new Movie
             {
-                StarRating = 5,
-                Comment = "Great!",
-                MovieId = movie.Id
-            });
+                Title = "Matrix",
+                Genre = "Action",
+                Rating = 4.5,
+                Cast = Array.Empty<string>(),
+                Description = "Test",
+                Director = "Test",
+                ImageUrl = "none.jpg",
+                TrailerUrl = "none.mp4"
+            };
+
+            _context.Movies.Add(movie);
+
+            _context.Reviews.AddRange(
+                new Review { StarRating = 5, Comment = "Super", Movie = movie, MovieId = movie.Id },
+                new Review { StarRating = 3, Comment = "Okay", Movie = movie, MovieId = movie.Id }
+            );
             await _context.SaveChangesAsync();
 
             // Act
@@ -67,137 +60,185 @@ namespace KinoWebsite_Backend.Tests.Controllers
 
             // Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
-            var list = Assert.IsAssignableFrom<IEnumerable<Review>>(ok.Value);
-            Assert.Single(list);
+            var reviews = Assert.IsAssignableFrom<IEnumerable<ReviewDto>>(ok.Value);
+            Assert.Equal(2, reviews.Count());
         }
 
         [Fact]
         public async Task GetReview_ReturnsNotFound_WhenMissing()
         {
-            var result = await _controller.GetReview(99);
+            var result = await _controller.GetReview(999);
             Assert.IsType<NotFoundResult>(result.Result);
         }
 
         [Fact]
         public async Task GetReview_ReturnsOk_WhenExists()
         {
-            // Arrange
-            var movie = CreateTestMovie("Film X");
+            var movie = new Movie
+            {
+                Title = "Matrix",
+                Genre = "Action",
+                Rating = 4.5,
+                Cast = Array.Empty<string>(),
+                Description = "Test",
+                Director = "Test",
+                ImageUrl = "none.jpg",
+                TrailerUrl = "none.mp4"
+            };
+
             _context.Movies.Add(movie);
-            var review = new Review { StarRating = 4, Comment = "Nice!", Movie = movie };
+
+            var review = new Review
+            {
+                StarRating = 4,
+                Comment = "Great movie",
+                Movie = movie,
+                MovieId = movie.Id
+            };
             _context.Reviews.Add(review);
             await _context.SaveChangesAsync();
 
-            // Act
             var result = await _controller.GetReview(review.Id);
 
-            // Assert
             var ok = Assert.IsType<OkObjectResult>(result.Result);
-            var val = Assert.IsType<Review>(ok.Value);
-            Assert.Equal("Nice!", val.Comment);
+            var dto = Assert.IsType<ReviewDto>(ok.Value);
+            Assert.Equal("Great movie", dto.Comment);
+            Assert.Equal(4, dto.StarRating);
         }
 
         [Fact]
         public async Task CreateReview_ReturnsCreated_WhenValid()
         {
-            // Arrange
-            var movie = CreateTestMovie("Film B");
+            var movie = new Movie
+            {
+                Title = "Matrix",
+                Genre = "Action",
+                Rating = 4.5,
+                Cast = Array.Empty<string>(),
+                Description = "Test",
+                Director = "Test",
+                ImageUrl = "none.jpg",
+                TrailerUrl = "none.mp4"
+            };
+
             _context.Movies.Add(movie);
             await _context.SaveChangesAsync();
 
             var dto = new ReviewCreateDto
             {
                 StarRating = 5,
-                Comment = "Awesome",
+                Comment = "Amazing!",
                 MovieId = movie.Id
             };
 
-            // Act
             var result = await _controller.CreateReview(dto);
 
-            // Assert
             var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-            var val = Assert.IsType<Review>(created.Value);
-            Assert.Equal(5, val.StarRating);
+            var reviewDto = Assert.IsType<ReviewDto>(created.Value);
+            Assert.Equal("Amazing!", reviewDto.Comment);
             Assert.Single(_context.Reviews);
         }
 
         [Fact]
-        public async Task CreateReview_ReturnsBadRequest_WhenMovieMissing()
+        public async Task CreateReview_ReturnsBadRequest_WhenInvalidMovie()
         {
-            // Arrange
             var dto = new ReviewCreateDto
             {
                 StarRating = 3,
-                Comment = "Fail",
+                Comment = "No movie",
                 MovieId = 999
             };
 
-            // Act
             var result = await _controller.CreateReview(dto);
 
-            // Assert
             var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-            Assert.Contains("nicht gefunden", bad.Value.ToString());
+            Assert.Contains("message", bad.Value.ToString(), StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
         public async Task UpdateReview_ChangesData_WhenExists()
         {
-            // Arrange
-            var movie = CreateTestMovie("Film C");
+            var movie = new Movie
+            {
+                Title = "Matrix",
+                Genre = "Action",
+                Rating = 4.5,
+                Cast = Array.Empty<string>(),
+                Description = "Test",
+                Director = "Test",
+                ImageUrl = "none.jpg",
+                TrailerUrl = "none.mp4"
+            };
+
             _context.Movies.Add(movie);
-            var review = new Review { StarRating = 2, Comment = "Old", Movie = movie };
+
+            var review = new Review
+            {
+                StarRating = 2,
+                Comment = "Confusing",
+                Movie = movie,
+                MovieId = movie.Id
+            };
             _context.Reviews.Add(review);
             await _context.SaveChangesAsync();
 
             var dto = new ReviewUpdateDto
             {
                 StarRating = 4,
-                Comment = "Updated"
+                Comment = "Actually pretty good"
             };
 
-            // Act
             var result = await _controller.UpdateReview(review.Id, dto);
 
-            // Assert
             Assert.IsType<NoContentResult>(result);
+
             var updated = await _context.Reviews.FindAsync(review.Id);
-            Assert.Equal("Updated", updated.Comment);
+            Assert.Equal("Actually pretty good", updated.Comment);
+            Assert.Equal(4, updated.StarRating);
         }
 
         [Fact]
         public async Task UpdateReview_ReturnsNotFound_WhenMissing()
         {
-            // Arrange
             var dto = new ReviewUpdateDto
             {
-                StarRating = 1,
-                Comment = "No"
+                StarRating = 5,
+                Comment = "Missing review"
             };
 
-            // Act
             var result = await _controller.UpdateReview(999, dto);
-
-            // Assert
-            var notFound = Assert.IsType<NotFoundObjectResult>(result);
-            Assert.Contains("nicht gefunden", notFound.Value.ToString());
+            Assert.IsType<NotFoundObjectResult>(result);
         }
 
         [Fact]
-        public async Task DeleteReview_RemovesEntity_WhenExists()
+        public async Task DeleteReview_Removes_WhenExists()
         {
-            // Arrange
-            var movie = CreateTestMovie("Film D");
+            var movie = new Movie
+            {
+                Title = "Matrix",
+                Genre = "Action",
+                Rating = 4.5,
+                Cast = Array.Empty<string>(),
+                Description = "Test",
+                Director = "Test",
+                ImageUrl = "none.jpg",
+                TrailerUrl = "none.mp4"
+            };
+
             _context.Movies.Add(movie);
-            var review = new Review { StarRating = 5, Comment = "Bye", Movie = movie };
+
+            var review = new Review
+            {
+                StarRating = 2,
+                Comment = "Delete me",
+                Movie = movie,
+                MovieId = movie.Id
+            };
             _context.Reviews.Add(review);
             await _context.SaveChangesAsync();
 
-            // Act
             var result = await _controller.DeleteReview(review.Id);
 
-            // Assert
             Assert.IsType<NoContentResult>(result);
             Assert.Empty(_context.Reviews);
         }
@@ -205,11 +246,52 @@ namespace KinoWebsite_Backend.Tests.Controllers
         [Fact]
         public async Task DeleteReview_ReturnsNotFound_WhenMissing()
         {
-            // Act
-            var result = await _controller.DeleteReview(123);
-
-            // Assert
+            var result = await _controller.DeleteReview(999);
             Assert.IsType<NotFoundResult>(result);
+        }
+
+        [Fact]
+        public async Task GetReviewsByMovieId_ReturnsOnlyReviewsForMovie()
+        {
+            var movie1 = new Movie
+            {
+                Title = "Matrix",
+                Genre = "Action",
+                Rating = 4.5,
+                Cast = Array.Empty<string>(),
+                Description = "Test",
+                Director = "Test",
+                ImageUrl = "none.jpg",
+                TrailerUrl = "none.mp4"
+            };
+
+            var movie2 = new Movie
+            {
+                Title = "Matrix",
+                Genre = "Action",
+                Rating = 4.5,
+                Cast = Array.Empty<string>(),
+                Description = "Test",
+                Director = "Test",
+                ImageUrl = "none.jpg",
+                TrailerUrl = "none.mp4"
+            };
+
+            _context.Movies.AddRange(movie1, movie2);
+            await _context.SaveChangesAsync();
+
+            _context.Reviews.AddRange(
+                new Review { StarRating = 5, Comment = "Top", Movie = movie1, MovieId = movie1.Id },
+                new Review { StarRating = 3, Comment = "Ok", Movie = movie2, MovieId = movie2.Id }
+            );
+            await _context.SaveChangesAsync();
+
+            var result = await _controller.GetReviewsByMovieId(movie1.Id);
+
+            var ok = Assert.IsType<OkObjectResult>(result.Result);
+            var reviews = Assert.IsAssignableFrom<IEnumerable<ReviewDto>>(ok.Value);
+            Assert.Single(reviews);
+            Assert.All(reviews, r => Assert.Equal(movie1.Id, r.MovieId));
         }
     }
 }

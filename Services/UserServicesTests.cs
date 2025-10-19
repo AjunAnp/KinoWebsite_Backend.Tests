@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using KinoWebsite_Backend.Data;
 using KinoWebsite_Backend.DTOs;
 using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Moq;
 using Xunit;
 
 namespace KinoWebsite_Backend.Tests.Services
@@ -14,17 +17,28 @@ namespace KinoWebsite_Backend.Tests.Services
         private AppDbContext GetDbContext()
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseInMemoryDatabase(Guid.NewGuid().ToString()) // Jede Testmethode frische DB
+                .UseInMemoryDatabase(Guid.NewGuid().ToString()) // frische DB pro Test
                 .Options;
 
             return new AppDbContext(options);
         }
-        /*
+
+        private IConfiguration GetConfig()
+        {
+            var data = new Dictionary<string, string>
+            {
+                { "PasswordReset:SecretKey", "TEST_SECRET_KEY_123" }
+            };
+            return new ConfigurationBuilder().AddInMemoryCollection(data).Build();
+        }
+
         [Fact]
         public async Task RegisterAsync_ShouldCreateUser_WhenDataIsValid()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             var dto = new UserRegisterDto
             {
@@ -47,7 +61,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task RegisterAsync_ShouldReturnNull_WhenEmailAlreadyExists()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             await service.RegisterAsync(new UserRegisterDto
             {
@@ -76,7 +92,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task LoginAsync_ShouldReturnUser_WhenPasswordMatches()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             await service.RegisterAsync(new UserRegisterDto
             {
@@ -99,7 +117,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task LoginAsync_ShouldReturnNull_WhenWrongPassword()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             await service.RegisterAsync(new UserRegisterDto
             {
@@ -120,7 +140,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task GetAllAsync_ShouldReturnAllUsers()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             await service.RegisterAsync(new UserRegisterDto
             {
@@ -151,7 +173,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task GetByIdAsync_ShouldReturnCorrectUser()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             var user = await service.RegisterAsync(new UserRegisterDto
             {
@@ -173,7 +197,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task UpdateAsync_ShouldModifyUser_WhenExists()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             var user = await service.RegisterAsync(new UserRegisterDto
             {
@@ -189,7 +215,8 @@ namespace KinoWebsite_Backend.Tests.Services
             {
                 Firstname = "Jan",
                 Lastname = "Neu",
-                PhoneNumber = "9999"
+                PhoneNumber = "9999",
+                email = "jan_neu@test.de"
             };
 
             var result = await service.UpdateAsync(user.Id, dto);
@@ -199,13 +226,16 @@ namespace KinoWebsite_Backend.Tests.Services
             var updated = await service.GetByIdAsync(user.Id);
             Assert.Equal("Neu", updated.Lastname);
             Assert.Equal("9999", updated.PhoneNumber);
+            Assert.Equal("jan_neu@test.de", updated.Email);
         }
 
         [Fact]
         public async Task DeleteAsync_ShouldRemoveUser_WhenExists()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             var user = await service.RegisterAsync(new UserRegisterDto
             {
@@ -227,11 +257,13 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task DeleteAsync_ShouldReturnFalse_WhenUserDoesNotExist()
         {
             var db = GetDbContext();
-            var service = new UserService(db);
+            var emailService = new Mock<IEmailService>();
+            var config = GetConfig();
+            var service = new UserService(db, emailService.Object, config);
 
             var result = await service.DeleteAsync(999);
 
             Assert.False(result);
-        }*/
+        }
     }
 }
