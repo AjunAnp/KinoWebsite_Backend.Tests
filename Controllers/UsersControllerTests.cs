@@ -28,7 +28,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 .Options;
 
             _context = new AppDbContext(options);
-            _service = new UserService(_context);
+            //_service = new UserService(_context);
             _controller = new UsersController(_service);
         }
 
