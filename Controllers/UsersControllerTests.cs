@@ -196,7 +196,7 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 Firstname = "New",
                 Lastname = "Name",
                 PhoneNumber = "111",
-                email = "new@example.com"
+                Email = "new@example.com"
             };
 
             var result = await _controller.UpdateUser(user.Id, dto);

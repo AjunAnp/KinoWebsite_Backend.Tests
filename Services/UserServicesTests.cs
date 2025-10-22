@@ -216,7 +216,8 @@ namespace KinoWebsite_Backend.Tests.Services
                 Firstname = "Jan",
                 Lastname = "Neu",
                 PhoneNumber = "9999",
-                email = "jan_neu@test.de"
+                Email = "jan_neu@test.de",
+                IsAdmin = false
             };
 
             var result = await service.UpdateAsync(user.Id, dto);
