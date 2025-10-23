@@ -1,15 +1,16 @@
-﻿using Xunit;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using KinoWebsite_Backend.Controllers;
-using KinoWebsite_Backend.Models;
-using KinoWebsite_Backend.DTOs;
-using KinoWebsite_Backend.Services;
 using KinoWebsite_Backend.Data;
-using System.Linq;
+using KinoWebsite_Backend.DTOs;
+using KinoWebsite_Backend.Models;
+using KinoWebsite_Backend.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using Xunit;
 
 namespace KinoWebsite_Backend.Tests.Controllers
 {
@@ -27,7 +28,10 @@ namespace KinoWebsite_Backend.Tests.Controllers
                 .Options;
 
             _context = new AppDbContext(options);
-            _roomService = new RoomService(_context);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+
+            _roomService = new RoomService(_context, serviceProviderMock.Object);
             _seatService = new SeatService(_context);
             _controller = new RoomsController(_roomService, _seatService);
         }

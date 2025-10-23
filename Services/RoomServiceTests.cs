@@ -6,6 +6,7 @@ using KinoWebsite_Backend.Models;
 using KinoWebsite_Backend.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Moq;
 using Xunit;
 
 namespace KinoWebsite_Backend.Tests.Services
@@ -37,7 +38,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task CreateRoomAsync_ShouldAddRoom()
         {
             var db = GetDbContext();
-            var service = new RoomService(db);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var service = new RoomService(db, serviceProviderMock.Object);
 
             var room = new Room { Name = "Saal 1", Capacity = 100, isAvailable = true };
             var created = await service.CreateRoomAsync(room);
@@ -51,7 +54,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task GetRoomByIdAsync_ShouldReturnRoom()
         {
             var db = GetDbContext();
-            var service = new RoomService(db);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var service = new RoomService(db, serviceProviderMock.Object);
 
             var room = new Room { Name = "Saal 2", Capacity = 50, isAvailable = true };
             db.Rooms.Add(room);
@@ -67,7 +72,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task UpdateRoomAsync_ShouldChangeValues()
         {
             var db = GetDbContext();
-            var service = new RoomService(db);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var service = new RoomService(db, serviceProviderMock.Object);
 
             var room = new Room { Name = "Alt", Capacity = 20, isAvailable = true };
             db.Rooms.Add(room);
@@ -86,7 +93,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task DeleteRoomAsync_ShouldRemove_WhenNoSeats()
         {
             var db = GetDbContext();
-            var service = new RoomService(db);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var service = new RoomService(db, serviceProviderMock.Object);
 
             var room = new Room { Name = "Löschen", Capacity = 10, isAvailable = true };
             db.Rooms.Add(room);
@@ -102,13 +111,14 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task DeleteRoomAsync_ShouldFail_WhenSeatsExist()
         {
             var db = GetDbContext();
-            var service = new RoomService(db);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var service = new RoomService(db, serviceProviderMock.Object);
 
             var room = new Room { Name = "Blockiert", Capacity = 10, isAvailable = true };
             db.Rooms.Add(room);
             await db.SaveChangesAsync();
 
-            
             db.Seats.Add(CreateSeat(room.Id, 'A', 1));
             await db.SaveChangesAsync();
 
@@ -121,7 +131,9 @@ namespace KinoWebsite_Backend.Tests.Services
         public async Task GenerateLayoutAsync_ShouldCreateSeats()
         {
             var db = GetDbContext();
-            var service = new RoomService(db);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var service = new RoomService(db, serviceProviderMock.Object);
 
             var room = new Room { Name = "Layout", isAvailable = true };
             db.Rooms.Add(room);
@@ -130,20 +142,21 @@ namespace KinoWebsite_Backend.Tests.Services
             var seats = await service.GenerateLayoutAsync(room.Id, 2, 3);
 
             Assert.NotNull(seats);
-            Assert.Equal(6, seats.Count); 
+            Assert.Equal(6, seats.Count);
         }
 
         [Fact]
         public async Task RecalculateCapacityAsync_ShouldUpdateCapacity()
         {
             var db = GetDbContext();
-            var service = new RoomService(db);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var service = new RoomService(db, serviceProviderMock.Object);
 
             var room = new Room { Name = "Kapazität" };
             db.Rooms.Add(room);
             await db.SaveChangesAsync();
 
-            
             db.Seats.Add(CreateSeat(room.Id, 'A', 1));
             db.Seats.Add(CreateSeat(room.Id, 'A', 2));
             await db.SaveChangesAsync();

@@ -1,4 +1,5 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -38,7 +39,11 @@ namespace KinoWebsite_Backend.Tests.Services
                       .ReturnsAsync("PAYPAL123");
 
             var ticketService = new TicketService(context);
-            var service = new OrderService(context, emailMock.Object, ticketService, payPalMock.Object);
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var showServiceMock = new Mock<ShowService>(context, serviceProviderMock.Object);
+
+            var service = new OrderService(context, emailMock.Object, ticketService, payPalMock.Object, showServiceMock.Object);
 
             return (service, context);
         }
