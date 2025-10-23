@@ -28,8 +28,10 @@ namespace KinoWebsite_Backend.Tests.Controllers
             var paypalMock = new Mock<IPayPalService>();
             var ticketService = new TicketService(context);
             var serviceProviderMock = new Mock<IServiceProvider>();
-            var showServiceMock = new Mock<ShowService>(context, serviceProviderMock.Object);
-            var service = new OrderService(context, emailMock.Object, ticketService, paypalMock.Object, showServiceMock.Object);
+            var roomServiceMock = new Mock<RoomService>(context, serviceProviderMock.Object);
+            var showService = new ShowService(context, roomServiceMock.Object);
+            var service = new OrderService(context, emailMock.Object, ticketService, paypalMock.Object, showService);
+
 
             return new OrdersController(service);
         }

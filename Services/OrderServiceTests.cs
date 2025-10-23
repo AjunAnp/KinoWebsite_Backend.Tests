@@ -41,9 +41,10 @@ namespace KinoWebsite_Backend.Tests.Services
             var ticketService = new TicketService(context);
 
             var serviceProviderMock = new Mock<IServiceProvider>();
-            var showServiceMock = new Mock<ShowService>(context, serviceProviderMock.Object);
+            var roomServiceMock = new Mock<RoomService>(context, serviceProviderMock.Object);
+            var showService = new ShowService(context, roomServiceMock.Object);
+            var service = new OrderService(context, emailMock.Object, ticketService, payPalMock.Object, showService);
 
-            var service = new OrderService(context, emailMock.Object, ticketService, payPalMock.Object, showServiceMock.Object);
 
             return (service, context);
         }

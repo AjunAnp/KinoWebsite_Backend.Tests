@@ -53,8 +53,9 @@ namespace KinoWebsite_Backend.Tests.Services
             await context.SaveChangesAsync();
 
             var mockLogger = new Mock<ILogger<ShowStatusService>>();
-            var mockRoomService = new Mock<RoomService>(null);
-            var showService = new ShowService(context, mockRoomService.Object);
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var roomService = new RoomService(context, serviceProviderMock.Object);
+            var showService = new ShowService(context, roomService);
             var provider = BuildServiceProvider(context, showService);
 
             var service = new ShowStatusService(mockLogger.Object, provider);
@@ -92,8 +93,9 @@ namespace KinoWebsite_Backend.Tests.Services
             await context.SaveChangesAsync();
 
             var mockLogger = new Mock<ILogger<ShowStatusService>>();
-            var mockRoomService = new Mock<RoomService>(null);
-            var showService = new ShowService(context, mockRoomService.Object);
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var roomService = new RoomService(context, serviceProviderMock.Object);
+            var showService = new ShowService(context, roomService);
             var provider = BuildServiceProvider(context, showService);
 
             var service = new ShowStatusService(mockLogger.Object, provider);
@@ -116,8 +118,9 @@ namespace KinoWebsite_Backend.Tests.Services
             // Arrange
             using var context = new AppDbContext(_dbOptions);
             var mockLogger = new Mock<ILogger<ShowStatusService>>();
-            var mockRoomService = new Mock<RoomService>(null);
-            var showService = new ShowService(context, mockRoomService.Object);
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var roomService = new RoomService(context, serviceProviderMock.Object);
+            var showService = new ShowService(context, roomService);
             var provider = BuildServiceProvider(context, showService);
             var service = new ShowStatusService(mockLogger.Object, provider);
 
@@ -142,8 +145,9 @@ namespace KinoWebsite_Backend.Tests.Services
             // Arrange
             using var context = new AppDbContext(_dbOptions);
             var mockLogger = new Mock<ILogger<ShowStatusService>>();
-            var mockRoomService = new Mock<RoomService>(null);
-            var showService = new ShowService(context, mockRoomService.Object);
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var roomService = new RoomService(context, serviceProviderMock.Object);
+            var showService = new ShowService(context, roomService);
             var provider = BuildServiceProvider(context, showService);
             var service = new ShowStatusService(mockLogger.Object, provider);
 

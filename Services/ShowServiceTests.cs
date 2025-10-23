@@ -26,8 +26,10 @@ namespace KinoWebsite_Backend.Tests.Services
                 .Options;
 
             _context = new AppDbContext(options);
-            _roomServiceMock = new Mock<RoomService>(null);
-            _service = new ShowService(_context, _roomServiceMock.Object);
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            var roomService = new RoomService(_context, serviceProviderMock.Object);
+            _service = new ShowService(_context, roomService);
+
         }
 
 
